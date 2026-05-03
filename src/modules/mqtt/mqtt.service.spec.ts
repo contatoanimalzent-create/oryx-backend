@@ -159,9 +159,8 @@ describe('MqttService', () => {
       // After resetModules the PrismaService class identity changes, so the
       // testing module needs to be wired against the freshly imported token.
       const { MqttService } = await import('./mqtt.service');
-      const { PrismaService: FreshPrismaService } = await import(
-        '../../shared/database/prisma.service'
-      );
+      const { PrismaService: FreshPrismaService } =
+        await import('../../shared/database/prisma.service');
       const moduleRef = await Test.createTestingModule({
         providers: [MqttService, { provide: FreshPrismaService, useValue: prisma }],
       }).compile();
