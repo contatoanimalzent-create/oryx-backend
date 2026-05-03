@@ -7,6 +7,7 @@ import { loadEnv } from './config/env';
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
+import { MqttModule } from './modules/mqtt/mqtt.module';
 import { OperatorsModule } from './modules/operators/operators.module';
 import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
@@ -46,6 +47,7 @@ const env = loadEnv();
     EventsModule,
     TeamsModule,
     SquadsModule,
+    MqttModule,
   ],
   controllers: [HealthController],
   providers: [

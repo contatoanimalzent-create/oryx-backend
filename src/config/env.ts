@@ -27,6 +27,15 @@ const envSchema = z.object({
   // Token TTLs accept the ms-style strings @nestjs/jwt understands ("15m", "30d").
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
+
+  // MQTT / AWS IoT Core (sessão 1.8). Default mode is `stub` so dev can issue
+  // structurally-correct credentials without an AWS account. `aws` mode plugs
+  // STS+SigV4 in the deploy session.
+  MQTT_MODE: z.enum(['stub', 'aws']).default('stub'),
+  MQTT_CREDENTIAL_TTL_SECONDS: z.coerce.number().int().min(60).max(43_200).default(3_600),
+  AWS_REGION: z.string().default('sa-east-1'),
+  AWS_IOT_ENDPOINT: z.string().optional(),
+  AWS_IOT_ROLE_ARN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
