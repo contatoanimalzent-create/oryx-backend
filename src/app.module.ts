@@ -11,6 +11,7 @@ import { OperatorsModule } from './modules/operators/operators.module';
 import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { PrismaModule } from './shared/database/prisma.module';
+import { RedisModule } from './shared/redis/redis.module';
 
 const env = loadEnv();
 
@@ -39,6 +40,7 @@ const env = loadEnv();
     // CLAUDE.md §3.7 — 100 req / 15 min on every public endpoint.
     ThrottlerModule.forRoot([{ name: 'default', ttl: 15 * 60 * 1000, limit: 100 }]),
     PrismaModule,
+    RedisModule,
     AuthModule,
     OperatorsModule,
     EventsModule,

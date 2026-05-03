@@ -5,6 +5,7 @@ const VALID_JWT_SECRET = 'a'.repeat(32);
 
 function setRequired(): void {
   process.env.DATABASE_URL = VALID_DB_URL;
+  process.env.REDIS_URL = 'redis://localhost:6379';
   process.env.JWT_ACCESS_SECRET = VALID_JWT_SECRET;
   process.env.JWT_REFRESH_SECRET = VALID_JWT_SECRET + 'b';
 }
@@ -87,6 +88,24 @@ describe('loadEnv', () => {
 
   it('exits when JWT_REFRESH_SECRET is missing', async () => {
     delete process.env.JWT_REFRESH_SECRET;
+    vi.spyOn(process, 'exit').mockImplementation(exitImpl);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { loadEnv } = await import('./env');
+    expect(() => loadEnv()).toThrow(/exit:1/);
+  });
+
+  it('exits when REDIS_URL is missing', async () => {
+    delete process.env.REDIS_URL;
+    vi.spyOn(process, 'exit').mockImplementation(exitImpl);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { loadEnv } = await import('./env');
+    expect(() => loadEnv()).toThrow(/exit:1/);
+  });
+
+  it('exits when REDIS_URL uses a non-redis scheme', async () => {
+    process.env.REDIS_URL = 'http://localhost:6379';
     vi.spyOn(process, 'exit').mockImplementation(exitImpl);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 

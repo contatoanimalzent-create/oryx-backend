@@ -11,6 +11,14 @@ const envSchema = z.object({
       message: 'DATABASE_URL must be a postgres:// or postgresql:// connection string',
     }),
 
+  // Redis: redis:// for plain TCP, rediss:// for TLS (ElastiCache prod).
+  REDIS_URL: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith('redis://') || url.startsWith('rediss://'), {
+      message: 'REDIS_URL must be a redis:// or rediss:// connection string',
+    }),
+
   // JWT secrets — different keys for access vs refresh so a leaked refresh
   // store cannot mint access tokens, and vice-versa.
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be >= 32 chars'),
