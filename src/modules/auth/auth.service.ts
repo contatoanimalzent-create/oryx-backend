@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 import { loadEnv } from '../../config/env';
@@ -14,8 +15,9 @@ import type {
 } from './dto/auth.dto';
 import { AuthRepository } from './auth.repository';
 
-interface AccessTokenClaims {
+export interface AccessTokenClaims {
   sub: string; // userId
+  role: Role;
   type: 'access';
 }
 
@@ -59,7 +61,7 @@ export class AuthService {
       displayName: dto.displayName,
     });
 
-    const tokens = await this.issueTokens(user.id);
+    const tokens = await this.issueTokens(user.id, user.role);
 
     return { user: this.toAuthenticatedUser(user), tokens };
   }
@@ -76,7 +78,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials.');
     }
 
-    const tokens = await this.issueTokens(user.id);
+    const tokens = await this.issueTokens(user.id, user.role);
     return { user: this.toAuthenticatedUser(user), tokens };
   }
 
@@ -113,7 +115,7 @@ export class AuthService {
       expiresAt: newRefresh.expiresAt,
     });
 
-    const access = await this.signAccess(user.id);
+    const access = await this.signAccess(user.id, user.role);
 
     return {
       user: this.toAuthenticatedUser(user),
@@ -145,8 +147,8 @@ export class AuthService {
 
   // ─── Internals ─────────────────────────────────────────────────────────
 
-  private async issueTokens(userId: string): Promise<TokenPair> {
-    const access = await this.signAccess(userId);
+  private async issueTokens(userId: string, role: Role): Promise<TokenPair> {
+    const access = await this.signAccess(userId, role);
     const refresh = await this.signRefresh(userId);
 
     await this.repository.createRefreshToken({
@@ -164,8 +166,11 @@ export class AuthService {
     };
   }
 
-  private async signAccess(userId: string): Promise<{ token: string; expiresAt: Date }> {
-    const claims: AccessTokenClaims = { sub: userId, type: 'access' };
+  private async signAccess(
+    userId: string,
+    role: Role,
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const claims: AccessTokenClaims = { sub: userId, role, type: 'access' };
     const token = await this.jwt.signAsync(claims, {
       secret: this.env.JWT_ACCESS_SECRET,
       expiresIn: this.env.JWT_ACCESS_TTL,
@@ -197,7 +202,8 @@ export class AuthService {
     id: string;
     email: string;
     displayName: string;
+    role: Role;
   }): AuthenticatedUser {
-    return { id: user.id, email: user.email, displayName: user.displayName };
+    return { id: user.id, email: user.email, displayName: user.displayName, role: user.role };
   }
 }

@@ -1,5 +1,6 @@
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,6 +69,7 @@ describe('AuthService', () => {
             email: data.email,
             passwordHash: data.passwordHash,
             displayName: data.displayName,
+            role: Role.OPERATOR,
             createdAt: new Date(),
             updatedAt: new Date(),
           }),
@@ -80,9 +82,21 @@ describe('AuthService', () => {
         displayName: 'Op One',
       });
 
-      expect(result.user).toEqual({ id: 'user-1', email: 'op1@oryx.app', displayName: 'Op One' });
+      expect(result.user).toEqual({
+        id: 'user-1',
+        email: 'op1@oryx.app',
+        displayName: 'Op One',
+        role: Role.OPERATOR,
+      });
       expect(result.tokens.accessToken).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
       expect(result.tokens.refreshToken).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
+
+      // Access token must carry the role claim so RolesGuard sees it.
+      const decoded = JSON.parse(
+        Buffer.from(result.tokens.accessToken.split('.')[1], 'base64url').toString(),
+      ) as { role?: Role; type?: string };
+      expect(decoded.role).toBe(Role.OPERATOR);
+      expect(decoded.type).toBe('access');
 
       // Password hash must NOT be the plain password.
       const createCall = repo.createUser.mock.calls[0][0] as { passwordHash: string };
@@ -113,13 +127,14 @@ describe('AuthService', () => {
   // ─── login ───────────────────────────────────────────────────────────────
 
   describe('login', () => {
-    it('issues tokens for valid credentials', async () => {
+    it('issues tokens for valid credentials and includes role claim', async () => {
       const passwordHash = await argon2.hash('correct-horse-battery-staple');
       repo.findUserByEmail.mockResolvedValue({
         id: 'user-2',
         email: 'op2@oryx.app',
         passwordHash,
         displayName: 'Op Two',
+        role: Role.SQUAD_LEADER,
       });
       repo.createRefreshToken.mockResolvedValue({});
 
@@ -129,7 +144,12 @@ describe('AuthService', () => {
       });
 
       expect(result.user.id).toBe('user-2');
-      expect(result.tokens.accessToken).toBeDefined();
+      expect(result.user.role).toBe(Role.SQUAD_LEADER);
+
+      const decoded = JSON.parse(
+        Buffer.from(result.tokens.accessToken.split('.')[1], 'base64url').toString(),
+      ) as { role?: Role };
+      expect(decoded.role).toBe(Role.SQUAD_LEADER);
     });
 
     it('rejects with the same message for missing user and wrong password', async () => {
@@ -144,6 +164,7 @@ describe('AuthService', () => {
         email: 'someone@oryx.app',
         passwordHash,
         displayName: 'X',
+        role: Role.OPERATOR,
       });
       const wrongPassword = service
         .login({ email: 'someone@oryx.app', password: 'wrong' })
@@ -181,6 +202,7 @@ describe('AuthService', () => {
         email: 'op3@oryx.app',
         passwordHash: 'irrelevant',
         displayName: 'Op Three',
+        role: Role.OPERATOR,
       });
       let storedHash = '';
       let storedId = '';
@@ -209,6 +231,7 @@ describe('AuthService', () => {
         email: 'op3@oryx.app',
         passwordHash: 'irrelevant',
         displayName: 'Op Three',
+        role: Role.OPERATOR,
       });
       repo.rotateRefreshToken.mockResolvedValue({});
 
@@ -227,6 +250,7 @@ describe('AuthService', () => {
         email: 'op4@oryx.app',
         passwordHash: 'x',
         displayName: 'X',
+        role: Role.OPERATOR,
       });
       repo.createRefreshToken.mockResolvedValue({});
       const registered = await service.register({

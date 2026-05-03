@@ -1,4 +1,9 @@
+import { Role } from '@prisma/client';
 import { z } from 'zod';
+
+// Re-export Role so consumers (decorators, controllers) avoid the
+// "@prisma/client deep import" everywhere.
+export { Role };
 
 // Zod schemas live at the HTTP boundary (CLAUDE.md §3.3 layer 1).
 // class-validator DTOs are kept lightweight because controllers parse
@@ -35,6 +40,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   displayName: string;
+  role: Role;
 }
 
 export interface TokenPair {

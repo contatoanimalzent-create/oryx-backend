@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Role } from '@prisma/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthController } from './auth.controller';
@@ -113,9 +114,15 @@ describe('AuthController', () => {
   });
 
   describe('GET /auth/me', () => {
-    it('returns the user injected by the guard/decorator', () => {
-      const user = { id: 'u-1', email: 'op@oryx.app', displayName: 'Op' };
+    it('returns the user injected by the guard/decorator (role included)', () => {
+      const user = {
+        id: 'u-1',
+        email: 'op@oryx.app',
+        displayName: 'Op',
+        role: Role.ADMIN,
+      };
       expect(controller.me(user)).toBe(user);
+      expect(controller.me(user).role).toBe(Role.ADMIN);
     });
   });
 });
