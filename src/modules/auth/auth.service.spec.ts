@@ -12,6 +12,7 @@ const TEST_ENV = {
   PORT: '3000',
   LOG_LEVEL: 'silent',
   DATABASE_URL: 'postgresql://x:x@localhost:5432/x',
+  REDIS_URL: 'redis://localhost:6379',
   JWT_ACCESS_SECRET: 'a'.repeat(32),
   JWT_REFRESH_SECRET: 'b'.repeat(32),
   JWT_ACCESS_TTL: '15m',

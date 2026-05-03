@@ -39,9 +39,14 @@ jobs:
       - name: Unit tests
         run: npm test
         env:
-          # Boot validation requires a postgres URL even when no test hits the DB.
-          # Real Postgres+PostGIS service joins this job in session 1.7+.
+          # Boot validation requires these vars at module instantiation time
+          # (services read loadEnv() in field initializers). Values are stubs —
+          # no test currently hits Postgres or Redis. Real services join this
+          # job when integration tests need them (session 4.1).
           DATABASE_URL: postgresql://oryx:oryx@localhost:5432/oryx
+          REDIS_URL: redis://localhost:6379
+          JWT_ACCESS_SECRET: ci-stub-access-secret-aaaaaaaaaaaaaaaa
+          JWT_REFRESH_SECRET: ci-stub-refresh-secret-bbbbbbbbbbbbbbbb
 
   terraform:
     name: Terraform fmt + validate
