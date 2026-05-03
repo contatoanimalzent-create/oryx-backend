@@ -129,6 +129,7 @@ model Team {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  squads      Squad[]
 
   @@unique([eventId, name])
   @@index([eventId])
@@ -148,6 +149,53 @@ model Operator {
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  squadMemberships SquadMember[]
+  squadsLed        Squad[]        @relation("SquadLeader")
 
   @@map("operators")
+}
+
+// ─── Squads (sessão 1.6) ────────────────────────────────────────────────────
+
+enum SquadStatus {
+  ACTIVE
+  INACTIVE
+  DISBANDED
+}
+
+/// Sub-group within a Team. UNIQUE (team_id, name) keeps squad names per-team
+/// unambiguous. leaderId is optional and must be a member of the squad — the
+/// service enforces that invariant on PATCH and on member removal.
+model Squad {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teamId      String        @map("team_id") @db.Uuid
+  name        String
+  description String?
+  leaderId    String?       @map("leader_id") @db.Uuid
+  status      SquadStatus   @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  team        Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  leader      Operator?     @relation("SquadLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  members     SquadMember[]
+
+  @@unique([teamId, name])
+  @@index([teamId])
+  @@index([leaderId])
+  @@map("squads")
+}
+
+/// Junction Squad <-> Operator. Hard delete on removal — audit/history of
+/// joins/leaves comes when the audit module lands (Fase 4.x).
+model SquadMember {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  squadId    String   @map("squad_id") @db.Uuid
+  operatorId String   @map("operator_id") @db.Uuid
+  joinedAt   DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+  squad      Squad    @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@unique([squadId, operatorId])
+  @@index([operatorId])
+  @@map("squad_members")
 }

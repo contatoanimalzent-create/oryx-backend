@@ -8,6 +8,7 @@ import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
 import { OperatorsModule } from './modules/operators/operators.module';
+import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { PrismaModule } from './shared/database/prisma.module';
 
@@ -42,6 +43,7 @@ const env = loadEnv();
     OperatorsModule,
     EventsModule,
     TeamsModule,
+    SquadsModule,
   ],
   controllers: [HealthController],
   providers: [
