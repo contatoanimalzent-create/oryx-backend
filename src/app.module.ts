@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { loadEnv } from './config/env';
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { OperatorsModule } from './modules/operators/operators.module';
 import { PrismaModule } from './shared/database/prisma.module';
 
 const env = loadEnv();
@@ -36,6 +37,7 @@ const env = loadEnv();
     ThrottlerModule.forRoot([{ name: 'default', ttl: 15 * 60 * 1000, limit: 100 }]),
     PrismaModule,
     AuthModule,
+    OperatorsModule,
   ],
   controllers: [HealthController],
   providers: [
