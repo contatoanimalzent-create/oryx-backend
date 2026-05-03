@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { loadEnv } from './config/env';
 import { HealthController } from './health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { EventsModule } from './modules/events/events.module';
 import { OperatorsModule } from './modules/operators/operators.module';
 import { PrismaModule } from './shared/database/prisma.module';
 
@@ -38,6 +39,7 @@ const env = loadEnv();
     PrismaModule,
     AuthModule,
     OperatorsModule,
+    EventsModule,
   ],
   controllers: [HealthController],
   providers: [

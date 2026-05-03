@@ -33,6 +33,7 @@ model User {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   refreshTokens RefreshToken[]
   operator      Operator?
+  createdEvents Event[]  @relation("EventCreator")
 
   @@map("users")
 }
@@ -72,6 +73,45 @@ enum OperatorStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+// ─── Events (sessão 1.4) ────────────────────────────────────────────────────
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+enum EventMode {
+  WARFARE
+  COMPETITIVE
+  CHALLENGER
+  SNIPER
+  TACTICAL_TRAINING
+}
+
+/// Operational event (warfare run, competitive round, training class…).
+/// `operationalArea` is a GeoJSON Polygon stored as JSONB. PostGIS index +
+/// generated geography column come in session 1.11 (zones) when the first
+/// spatial query consumer lands.
+model Event {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  description     String?
+  mode            EventMode
+  status          EventStatus @default(DRAFT)
+  operationalArea Json        @map("operational_area")
+  startsAt        DateTime?   @map("starts_at") @db.Timestamptz(6)
+  endsAt          DateTime?   @map("ends_at") @db.Timestamptz(6)
+  createdById     String?     @map("created_by_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy       User?       @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([mode])
+  @@map("events")
 }
 
 /// Tactical profile for a field operator. One per user (1:1, optional —
