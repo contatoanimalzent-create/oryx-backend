@@ -1,0 +1,13 @@
+// ORYX backend — Prisma schema (canonical source of truth for the database).
+// Domain models are added per feature module in Fase 1.x sessions.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, pgcrypto]
+}
