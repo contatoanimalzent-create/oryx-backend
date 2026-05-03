@@ -108,10 +108,31 @@ model Event {
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy       User?       @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  teams           Team[]
 
   @@index([status])
   @@index([mode])
   @@map("events")
+}
+
+// ─── Teams / facções (sessão 1.5) ───────────────────────────────────────────
+
+/// Faction within an event — identity carrier (color + emblem) for groups of
+/// operators. UNIQUE (event_id, name) keeps faction names per-event unambiguous.
+model Team {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String
+  color       String
+  emblem      String?
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@map("teams")
 }
 
 /// Tactical profile for a field operator. One per user (1:1, optional —
