@@ -175,17 +175,49 @@ model Mission {
   zoneId        String?       @map("zone_id") @db.Uuid
   config        Json
   pointsReward  Int           @default(0) @map("points_reward")
-  status        MissionStatus @default(PENDING)
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
-  event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  zone          Zone?         @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  status        MissionStatus     @default(PENDING)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone          Zone?             @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  progress      MissionProgress[]
 
   @@unique([eventId, name])
   @@index([eventId])
   @@index([zoneId])
   @@index([status])
   @@map("missions")
+}
+
+// ─── Mission progress (sessão 1.13) ─────────────────────────────────────────
+
+enum MissionProgressState {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+/// Per-operator progress on a mission. mission-engine upserts this after
+/// each position event. `progress` JSONB carries type-specific state — e.g.
+/// CAPTURE: { secondsAccumulated, lastInsideAt }. SQUAD/FACTION aggregations
+/// come with ranking (1.15).
+model MissionProgress {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  missionId   String               @map("mission_id") @db.Uuid
+  operatorId  String               @map("operator_id") @db.Uuid
+  state       MissionProgressState @default(NOT_STARTED)
+  progress    Json                 @default("{}")
+  completedAt DateTime?            @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  mission     Mission              @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  operator    Operator             @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, operatorId])
+  @@index([operatorId])
+  @@index([state])
+  @@map("mission_progress")
 }
 
 // ─── Teams / facções (sessão 1.5) ───────────────────────────────────────────
@@ -221,10 +253,11 @@ model Operator {
   status           OperatorStatus    @default(ACTIVE)
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  squadMemberships SquadMember[]
-  squadsLed        Squad[]           @relation("SquadLeader")
-  positions        PositionHistory[]
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  squadMemberships  SquadMember[]
+  squadsLed         Squad[]           @relation("SquadLeader")
+  positions         PositionHistory[]
+  missionProgresses MissionProgress[]
 
   @@map("operators")
 }

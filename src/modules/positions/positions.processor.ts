@@ -1,7 +1,11 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
-import type { Job } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 
+import {
+  MISSION_PROGRESS_QUEUE_NAME,
+  type MissionProgressJob,
+} from '../mission-engine/dto/mission-engine.dto';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { RedisService } from '../../shared/redis/redis.service';
 import {
@@ -26,6 +30,8 @@ export class PositionsProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    @InjectQueue(MISSION_PROGRESS_QUEUE_NAME)
+    private readonly missionProgressQueue: Queue<MissionProgressJob>,
   ) {
     super();
   }
@@ -82,6 +88,35 @@ export class PositionsProcessor extends WorkerHost {
       this.logger.warn(
         { eventId: payload.eventId, error: err instanceof Error ? err.message : err },
         'failed to publish position to realtime channel',
+      );
+    }
+
+    // Mission engine (sessão 1.13) reads server-canonical state, never the
+    // mobile payload. Failures here don't roll back the live snapshot.
+    try {
+      await this.missionProgressQueue.add(
+        'tick',
+        {
+          eventId: payload.eventId,
+          operatorId: payload.operatorId,
+          lat: payload.lat,
+          lon: payload.lon,
+          recordedAt: recordedAt.toISOString(),
+        },
+        {
+          // jobId scoped to (event, operator, recordedAt) gives natural dedup
+          // for accidental re-enqueues of the same tick.
+          jobId: `${payload.eventId}:${payload.operatorId}:${recordedAt.getTime()}`,
+          removeOnComplete: 1_000,
+          removeOnFail: 1_000,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+        },
+      );
+    } catch (err) {
+      this.logger.warn(
+        { eventId: payload.eventId, error: err instanceof Error ? err.message : err },
+        'failed to enqueue mission-engine job',
       );
     }
   }

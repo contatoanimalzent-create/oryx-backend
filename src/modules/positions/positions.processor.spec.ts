@@ -44,6 +44,7 @@ describe('PositionsProcessor', () => {
     rawSet: ReturnType<typeof vi.fn>;
   };
   let publish: ReturnType<typeof vi.fn>;
+  let missionQueue: { add: ReturnType<typeof vi.fn> };
 
   beforeAll(() => {
     Object.assign(process.env, TEST_ENV);
@@ -58,10 +59,12 @@ describe('PositionsProcessor', () => {
       getClient: vi.fn(),
     };
     redis.getClient.mockReturnValue({ set: redis.rawSet, publish });
+    missionQueue = { add: vi.fn().mockResolvedValue({ id: 'mq-job' }) };
 
     processor = new PositionsProcessor(
       prisma as unknown as PrismaService,
       redis as unknown as RedisService,
+      missionQueue as never,
     );
   });
 
@@ -103,6 +106,19 @@ describe('PositionsProcessor', () => {
     const [channel, published] = publish.mock.calls[0] as [string, string];
     expect(channel).toBe(`event:${EVENT_ID}:positions`);
     expect(published).toBe(value);
+
+    // Mission engine: tick enqueued with deterministic jobId.
+    expect(missionQueue.add).toHaveBeenCalledOnce();
+    const [jobName, jobData, opts] = missionQueue.add.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+      { jobId: string; attempts: number },
+    ];
+    expect(jobName).toBe('tick');
+    expect(jobData.eventId).toBe(EVENT_ID);
+    expect(jobData.operatorId).toBe(OPERATOR_ID);
+    expect(opts.jobId).toMatch(`${EVENT_ID}:${OPERATOR_ID}:`);
+    expect(opts.attempts).toBe(3);
   });
 
   it('skips silently when SETNX returns null (duplicate clientEventId)', async () => {
@@ -113,6 +129,7 @@ describe('PositionsProcessor', () => {
     expect(prisma.positionHistory.create).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
+    expect(missionQueue.add).not.toHaveBeenCalled();
   });
 
   it('does not throw when realtime publish fails (best-effort)', async () => {
@@ -120,6 +137,14 @@ describe('PositionsProcessor', () => {
     await expect(processor.process(makeJob() as never)).resolves.toBeUndefined();
     // Live snapshot was still written even though fan-out failed.
     expect(redis.set).toHaveBeenCalled();
+    // Mission engine still enqueued.
+    expect(missionQueue.add).toHaveBeenCalled();
+  });
+
+  it('does not throw when mission-engine enqueue fails (best-effort)', async () => {
+    missionQueue.add.mockRejectedValueOnce(new Error('queue down'));
+    await expect(processor.process(makeJob() as never)).resolves.toBeUndefined();
+    expect(prisma.positionHistory.create).toHaveBeenCalled();
   });
 
   it('clamps recordedAt to receivedAt when client clock drifts > 5min', async () => {
