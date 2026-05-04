@@ -111,6 +111,7 @@ model Event {
   teams           Team[]
   positions       PositionHistory[]
   zones           Zone[]
+  missions        Mission[]
 
   @@index([status])
   @@index([mode])
@@ -135,10 +136,56 @@ model Zone {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  missions    Mission[]
 
   @@unique([eventId, name])
   @@index([eventId])
   @@map("zones")
+}
+
+// ─── Missions (sessão 1.12) ─────────────────────────────────────────────────
+
+enum MissionType {
+  CAPTURE
+  DEFEND
+  HOLD
+  CHECKPOINT
+  TIME
+  SQUAD
+  FACTION
+}
+
+enum MissionStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+/// Goal within an event. `type` decides what `config` should look like and
+/// whether `zoneId` is required — discriminated-union validation in the
+/// service layer (mission-engine in 1.13 reads it). `status` is owned by the
+/// engine; admin can manually set it to CANCELLED via PATCH.
+model Mission {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId       String        @map("event_id") @db.Uuid
+  type          MissionType
+  name          String
+  description   String?
+  zoneId        String?       @map("zone_id") @db.Uuid
+  config        Json
+  pointsReward  Int           @default(0) @map("points_reward")
+  status        MissionStatus @default(PENDING)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone          Zone?         @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@index([zoneId])
+  @@index([status])
+  @@map("missions")
 }
 
 // ─── Teams / facções (sessão 1.5) ───────────────────────────────────────────
