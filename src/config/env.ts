@@ -36,6 +36,13 @@ const envSchema = z.object({
   AWS_REGION: z.string().default('sa-east-1'),
   AWS_IOT_ENDPOINT: z.string().optional(),
   AWS_IOT_ROLE_ARN: z.string().optional(),
+
+  // Notifications / FCM (sessão 1.14). Same stub|real pattern as MQTT_MODE —
+  // `stub` flips notifications to SENT without calling Firebase; `fcm` will
+  // wire firebase-admin in the deploy session.
+  NOTIFICATIONS_MODE: z.enum(['stub', 'fcm']).default('stub'),
+  FCM_PROJECT_ID: z.string().optional(),
+  FCM_CREDENTIALS_JSON: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

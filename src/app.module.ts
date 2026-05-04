@@ -11,6 +11,7 @@ import { EventsModule } from './modules/events/events.module';
 import { MissionEngineModule } from './modules/mission-engine/mission-engine.module';
 import { MissionsModule } from './modules/missions/missions.module';
 import { MqttModule } from './modules/mqtt/mqtt.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OperatorsModule } from './modules/operators/operators.module';
 import { PositionsModule } from './modules/positions/positions.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
@@ -62,6 +63,7 @@ const env = loadEnv();
     ZonesModule,
     MissionsModule,
     MissionEngineModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [

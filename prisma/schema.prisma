@@ -24,16 +24,18 @@ enum Role {
 }
 
 model User {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String   @unique
-  passwordHash  String   @map("password_hash")
-  displayName   String   @map("display_name")
-  role          Role     @default(OPERATOR)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  refreshTokens RefreshToken[]
-  operator      Operator?
-  createdEvents Event[]  @relation("EventCreator")
+  id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String         @unique
+  passwordHash         String         @map("password_hash")
+  displayName          String         @map("display_name")
+  role                 Role           @default(OPERATOR)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  refreshTokens        RefreshToken[]
+  operator             Operator?
+  createdEvents        Event[]        @relation("EventCreator")
+  deviceTokens         DeviceToken[]
+  createdNotifications Notification[] @relation("NotificationCreator")
 
   @@map("users")
 }
@@ -342,4 +344,64 @@ model SquadMember {
   @@unique([squadId, operatorId])
   @@index([operatorId])
   @@map("squad_members")
+}
+
+// ─── Notifications + device tokens (sessão 1.14) ────────────────────────────
+
+enum NotificationTarget {
+  GLOBAL
+  EVENT
+  TEAM
+  SQUAD
+  INDIVIDUAL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+/// Outbound push notification. Engine (1.13) emits these automatically when a
+/// mission completes; admin can also create them ad-hoc through the controller.
+/// `target` decides which devices receive it; the worker resolves to the FCM
+/// token list at dispatch time so subsequent device registrations land too.
+model Notification {
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  target       NotificationTarget
+  targetId     String?            @map("target_id") @db.Uuid
+  title        String
+  body         String
+  status       NotificationStatus @default(PENDING)
+  sentCount    Int                @default(0) @map("sent_count")
+  failedCount  Int                @default(0) @map("failed_count")
+  sentAt       DateTime?          @map("sent_at") @db.Timestamptz(6)
+  error        String?
+  createdById  String?            @map("created_by_id") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy    User?              @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([target, targetId])
+  @@index([status])
+  @@map("notifications")
+}
+
+/// FCM device token registered by the mobile app. UNIQUE on the token itself
+/// (Firebase guarantees global uniqueness per device install).
+model DeviceToken {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  token        String         @unique
+  platform     DevicePlatform
+  registeredAt DateTime       @default(now()) @map("registered_at") @db.Timestamptz(6)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_tokens")
 }
