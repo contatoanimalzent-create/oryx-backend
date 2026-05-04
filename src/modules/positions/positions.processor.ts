@@ -1,0 +1,106 @@
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
+import type { Job } from 'bullmq';
+
+import { PrismaService } from '../../shared/database/prisma.service';
+import { RedisService } from '../../shared/redis/redis.service';
+import {
+  type LivePositionSnapshot,
+  POSITIONS_QUEUE_NAME,
+  type PositionIngestJob,
+} from './dto/positions.dto';
+
+/** Server-side timestamp drift threshold. Beyond this we log and clamp. */
+const MAX_DRIFT_MS = 5 * 60 * 1000;
+
+/** Live position TTL — admin/teammates see "online" while a packet was recent. */
+const LIVE_TTL_SECONDS = 60;
+
+/** Idempotency window — second push of the same clientEventId within is a no-op. */
+const DEDUP_TTL_SECONDS = 5 * 60;
+
+@Processor(POSITIONS_QUEUE_NAME)
+export class PositionsProcessor extends WorkerHost {
+  private readonly logger = new Logger(PositionsProcessor.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {
+    super();
+  }
+
+  async process(job: Job<PositionIngestJob>): Promise<void> {
+    const payload = job.data;
+
+    // ─── 1. Dedup ──────────────────────────────────────────────────────────
+    const dedupKey = `dedup:position:${payload.clientEventId}`;
+    const acquired = await this.redis.getClient().set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
+    if (acquired === null) {
+      this.logger.debug({ clientEventId: payload.clientEventId }, 'duplicate, skipping');
+      return;
+    }
+
+    // ─── 2. Server-authoritative timestamp ─────────────────────────────────
+    const recordedAt = this.adjustTimestamp(payload);
+
+    // ─── 3. Append to position_history ─────────────────────────────────────
+    await this.prisma.positionHistory.create({
+      data: {
+        operatorId: payload.operatorId,
+        eventId: payload.eventId,
+        lat: payload.lat,
+        lon: payload.lon,
+        accuracyM: payload.accuracyM,
+        headingDeg: payload.headingDeg,
+        speedMps: payload.speedMps,
+        clientEventId: payload.clientEventId,
+        recordedAt,
+      },
+    });
+
+    // ─── 4. Update live snapshot in Redis ──────────────────────────────────
+    const snapshot: LivePositionSnapshot = {
+      operatorId: payload.operatorId,
+      eventId: payload.eventId,
+      lat: payload.lat,
+      lon: payload.lon,
+      accuracyM: payload.accuracyM,
+      headingDeg: payload.headingDeg,
+      speedMps: payload.speedMps,
+      recordedAt: recordedAt.toISOString(),
+      receivedAt: payload.receivedAt,
+    };
+    await this.redis.set(
+      `live:position:${payload.operatorId}`,
+      JSON.stringify(snapshot),
+      LIVE_TTL_SECONDS,
+    );
+  }
+
+  /**
+   * If the client clock drifted more than MAX_DRIFT_MS from server time, log
+   * a structured warning (anti-cheat in 1.17 will graduate this to a real
+   * suspicion event) and clamp `recordedAt` to the receive time so downstream
+   * timeline ordering stays sane.
+   */
+  private adjustTimestamp(payload: PositionIngestJob): Date {
+    const recorded = new Date(payload.recordedAt);
+    const received = new Date(payload.receivedAt);
+    const drift = Math.abs(received.getTime() - recorded.getTime());
+    if (drift > MAX_DRIFT_MS) {
+      this.logger.warn(
+        {
+          operatorId: payload.operatorId,
+          clientEventId: payload.clientEventId,
+          driftMs: drift,
+          clientRecordedAt: payload.recordedAt,
+          serverReceivedAt: payload.receivedAt,
+        },
+        'position timestamp drift > 5min; clamping to server time',
+      );
+      return received;
+    }
+    return recorded;
+  }
+}
