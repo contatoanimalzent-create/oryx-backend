@@ -14,6 +14,7 @@ import { MqttModule } from './modules/mqtt/mqtt.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OperatorsModule } from './modules/operators/operators.module';
 import { PositionsModule } from './modules/positions/positions.module';
+import { RankingModule } from './modules/ranking/ranking.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
@@ -64,6 +65,7 @@ const env = loadEnv();
     MissionsModule,
     MissionEngineModule,
     NotificationsModule,
+    RankingModule,
   ],
   controllers: [HealthController],
   providers: [
