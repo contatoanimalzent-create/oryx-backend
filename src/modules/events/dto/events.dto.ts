@@ -1,35 +1,13 @@
 import { EventMode, EventStatus } from '@prisma/client';
 import { z } from 'zod';
 
+import { type GeoPolygon, polygonSchema } from '../../../shared/geo/geo.dto';
+
 export { EventMode, EventStatus };
-
-// ─── GeoJSON Polygon ────────────────────────────────────────────────────────
-// We accept the standard 2D form: [longitude, latitude]. Altitude (3rd element)
-// is rejected — keeps zone/missions math simpler. Validation matches RFC 7946:
-// at least one ring (exterior), each ring has >=4 positions and is closed.
-
-const longitudeSchema = z.number().min(-180).max(180);
-const latitudeSchema = z.number().min(-90).max(90);
-const positionSchema = z.tuple([longitudeSchema, latitudeSchema]);
-
-const linearRingSchema = z
-  .array(positionSchema)
-  .min(4, 'a linear ring needs at least 4 positions (with first == last)')
-  .refine(
-    (ring) => {
-      const first = ring[0];
-      const last = ring[ring.length - 1];
-      return first[0] === last[0] && first[1] === last[1];
-    },
-    { message: 'first and last positions of a ring must match (closed ring)' },
-  );
-
-export const polygonSchema = z.object({
-  type: z.literal('Polygon'),
-  coordinates: z.array(linearRingSchema).min(1, 'a Polygon must have at least the exterior ring'),
-});
-
-export type GeoPolygon = z.infer<typeof polygonSchema>;
+// Re-exported so existing consumers of events.dto don't break — the canonical
+// definition lives in shared/geo (CLAUDE.md §3.4: cross-module use goes
+// through a shared utility, not deep imports).
+export { polygonSchema, type GeoPolygon };
 
 // ─── Event DTOs ─────────────────────────────────────────────────────────────
 

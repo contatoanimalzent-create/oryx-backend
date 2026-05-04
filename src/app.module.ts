@@ -14,6 +14,7 @@ import { PositionsModule } from './modules/positions/positions.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
+import { ZonesModule } from './modules/zones/zones.module';
 import { PrismaModule } from './shared/database/prisma.module';
 import { RedisModule } from './shared/redis/redis.module';
 
@@ -56,6 +57,7 @@ const env = loadEnv();
     MqttModule,
     PositionsModule,
     RealtimeModule,
+    ZonesModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -107,13 +107,38 @@ model Event {
   createdById     String?     @map("created_by_id") @db.Uuid
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdBy       User?       @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy       User?             @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
   teams           Team[]
   positions       PositionHistory[]
+  zones           Zone[]
 
   @@index([status])
   @@index([mode])
   @@map("events")
+}
+
+// ─── Zones (sessão 1.11) ────────────────────────────────────────────────────
+
+/// Geographic zone within an event. `boundary` is a GeoJSON Polygon stored
+/// as JSONB. The migration adds a generated `boundary_geo geography(Polygon,
+/// 4326)` column with a GIST index — mission engine (1.13) queries that one
+/// for ST_Contains / ST_Within against incoming positions.
+///
+/// Mission types (CAPTURE/DEFEND/HOLD/...) are NOT modeled here — zones are
+/// pure geometry; missions decide how to interpret them (sessão 1.12).
+model Zone {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String
+  description String?
+  boundary    Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, name])
+  @@index([eventId])
+  @@map("zones")
 }
 
 // ─── Teams / facções (sessão 1.5) ───────────────────────────────────────────
