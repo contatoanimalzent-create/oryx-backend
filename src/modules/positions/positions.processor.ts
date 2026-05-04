@@ -59,7 +59,7 @@ export class PositionsProcessor extends WorkerHost {
       },
     });
 
-    // ─── 4. Update live snapshot in Redis ──────────────────────────────────
+    // ─── 4. Update live snapshot in Redis + fan-out via pub/sub ────────────
     const snapshot: LivePositionSnapshot = {
       operatorId: payload.operatorId,
       eventId: payload.eventId,
@@ -71,11 +71,19 @@ export class PositionsProcessor extends WorkerHost {
       recordedAt: recordedAt.toISOString(),
       receivedAt: payload.receivedAt,
     };
-    await this.redis.set(
-      `live:position:${payload.operatorId}`,
-      JSON.stringify(snapshot),
-      LIVE_TTL_SECONDS,
-    );
+    const snapshotJson = JSON.stringify(snapshot);
+    await this.redis.set(`live:position:${payload.operatorId}`, snapshotJson, LIVE_TTL_SECONDS);
+    // RealtimeSubscriber (sessão 1.10) listens on `event:*:positions` and
+    // forwards each message to the WebSocket room of admin clients tracking
+    // this event. Publish failures are logged but never break ingestion.
+    try {
+      await this.redis.getClient().publish(`event:${payload.eventId}:positions`, snapshotJson);
+    } catch (err) {
+      this.logger.warn(
+        { eventId: payload.eventId, error: err instanceof Error ? err.message : err },
+        'failed to publish position to realtime channel',
+      );
+    }
   }
 
   /**

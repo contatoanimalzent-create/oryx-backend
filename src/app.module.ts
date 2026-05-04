@@ -11,6 +11,7 @@ import { EventsModule } from './modules/events/events.module';
 import { MqttModule } from './modules/mqtt/mqtt.module';
 import { OperatorsModule } from './modules/operators/operators.module';
 import { PositionsModule } from './modules/positions/positions.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { PrismaModule } from './shared/database/prisma.module';
@@ -54,6 +55,7 @@ const env = loadEnv();
     SquadsModule,
     MqttModule,
     PositionsModule,
+    RealtimeModule,
   ],
   controllers: [HealthController],
   providers: [

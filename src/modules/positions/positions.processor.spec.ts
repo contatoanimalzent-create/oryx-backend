@@ -43,6 +43,7 @@ describe('PositionsProcessor', () => {
     getClient: ReturnType<typeof vi.fn>;
     rawSet: ReturnType<typeof vi.fn>;
   };
+  let publish: ReturnType<typeof vi.fn>;
 
   beforeAll(() => {
     Object.assign(process.env, TEST_ENV);
@@ -50,12 +51,13 @@ describe('PositionsProcessor', () => {
 
   beforeEach(() => {
     prisma = { positionHistory: { create: vi.fn().mockResolvedValue({}) } };
+    publish = vi.fn().mockResolvedValue(1);
     redis = {
       set: vi.fn().mockResolvedValue(undefined),
       rawSet: vi.fn().mockResolvedValue('OK'),
       getClient: vi.fn(),
     };
-    redis.getClient.mockReturnValue({ set: redis.rawSet });
+    redis.getClient.mockReturnValue({ set: redis.rawSet, publish });
 
     processor = new PositionsProcessor(
       prisma as unknown as PrismaService,
@@ -95,6 +97,12 @@ describe('PositionsProcessor', () => {
     expect(snapshot.operatorId).toBe(OPERATOR_ID);
     expect(snapshot.lat).toBe(-23.55);
     expect(snapshot.lon).toBe(-46.62);
+
+    // Realtime fan-out: must publish on event:<id>:positions with the same JSON.
+    expect(publish).toHaveBeenCalledOnce();
+    const [channel, published] = publish.mock.calls[0] as [string, string];
+    expect(channel).toBe(`event:${EVENT_ID}:positions`);
+    expect(published).toBe(value);
   });
 
   it('skips silently when SETNX returns null (duplicate clientEventId)', async () => {
@@ -104,6 +112,14 @@ describe('PositionsProcessor', () => {
 
     expect(prisma.positionHistory.create).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when realtime publish fails (best-effort)', async () => {
+    publish.mockRejectedValueOnce(new Error('redis publish broke'));
+    await expect(processor.process(makeJob() as never)).resolves.toBeUndefined();
+    // Live snapshot was still written even though fan-out failed.
+    expect(redis.set).toHaveBeenCalled();
   });
 
   it('clamps recordedAt to receivedAt when client clock drifts > 5min', async () => {
