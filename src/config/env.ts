@@ -43,6 +43,16 @@ const envSchema = z.object({
   NOTIFICATIONS_MODE: z.enum(['stub', 'fcm']).default('stub'),
   FCM_PROJECT_ID: z.string().optional(),
   FCM_CREDENTIALS_JSON: z.string().optional(),
+
+  // Voice / LiveKit (sessão 1.18). `stub` mints a structurally-valid opaque
+  // token without importing livekit-server-sdk — keeps dev/CI free of
+  // external deps. `livekit` plugs the real HS256-signed JWT in the deploy
+  // session.
+  VOICE_MODE: z.enum(['stub', 'livekit']).default('stub'),
+  VOICE_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(43_200).default(3_600),
+  LIVEKIT_URL: z.string().optional(),
+  LIVEKIT_API_KEY: z.string().optional(),
+  LIVEKIT_API_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

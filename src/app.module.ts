@@ -20,6 +20,7 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ReputationModule } from './modules/reputation/reputation.module';
 import { SquadsModule } from './modules/squads/squads.module';
 import { TeamsModule } from './modules/teams/teams.module';
+import { VoiceModule } from './modules/voice/voice.module';
 import { ZonesModule } from './modules/zones/zones.module';
 import { PrismaModule } from './shared/database/prisma.module';
 import { RedisModule } from './shared/redis/redis.module';
@@ -70,6 +71,7 @@ const env = loadEnv();
     RankingModule,
     ReputationModule,
     AntiCheatModule,
+    VoiceModule,
   ],
   controllers: [HealthController],
   providers: [
