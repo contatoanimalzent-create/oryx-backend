@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { loadEnv } from './config/env';
 import { HealthController } from './health/health.controller';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AntiCheatModule } from './modules/anti-cheat/anti-cheat.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { EventsModule } from './modules/events/events.module';
@@ -72,6 +73,7 @@ const env = loadEnv();
     ReputationModule,
     AntiCheatModule,
     VoiceModule,
+    AnalyticsModule,
   ],
   controllers: [HealthController],
   providers: [
