@@ -24,19 +24,21 @@ enum Role {
 }
 
 model User {
-  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                String          @unique
-  passwordHash         String          @map("password_hash")
-  displayName          String          @map("display_name")
-  role                 Role            @default(OPERATOR)
-  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String           @unique
+  passwordHash         String           @map("password_hash")
+  displayName          String           @map("display_name")
+  role                 Role             @default(OPERATOR)
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
   refreshTokens        RefreshToken[]
   operator             Operator?
-  createdEvents        Event[]         @relation("EventCreator")
+  createdEvents        Event[]          @relation("EventCreator")
   deviceTokens         DeviceToken[]
-  createdNotifications Notification[]  @relation("NotificationCreator")
-  authoredReputation   ReputationLog[] @relation("ReputationAuthor")
+  createdNotifications Notification[]   @relation("NotificationCreator")
+  authoredReputation   ReputationLog[]  @relation("ReputationAuthor")
+  unitAssignments      UnitInstructor[]
+  ledClasses           Class[]          @relation("ClassLeadInstructor")
 
   @@map("users")
 }
@@ -117,6 +119,7 @@ model Event {
   missions        Mission[]
   reputationLogs  ReputationLog[]
   cheatSuspicions CheatSuspicion[]
+  exercise        Exercise?
 
   @@index([status])
   @@index([mode])
@@ -508,4 +511,97 @@ model CheatSuspicion {
   @@index([eventId])
   @@index([operatorId, createdAt(sort: Desc)])
   @@map("cheat_suspicions")
+}
+
+// ─── Tactical layer (sessão 1.21) ───────────────────────────────────────────
+
+/// Organizational training unit (battalion, school, academy). Flat hierarchy
+/// for now — parent/child can be added later when a real second-level need
+/// surfaces (CLAUDE.md §3.6).
+model Unit {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  abbreviation String?
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  instructors  UnitInstructor[]
+  classes      Class[]
+
+  @@unique([name])
+  @@map("units")
+}
+
+/// Junction: instructor users associated to a unit. The service rejects the
+/// insert when the user's role is not INSTRUCTOR (admin keeps their global
+/// access without needing an explicit assignment — same posture as how admin
+/// implicit-membership works in voice/AAR).
+model UnitInstructor {
+  unitId     String   @map("unit_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([unitId, userId])
+  @@index([userId])
+  @@map("unit_instructors")
+}
+
+enum ClassStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+/// Training class (turma): a cohort taking a course inside a unit. The lead
+/// instructor is a single user (FK), but more instructors can co-teach via
+/// `unit_instructors` membership (no per-class assignment table until needed).
+model Class {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unitId           String      @map("unit_id") @db.Uuid
+  leadInstructorId String      @map("lead_instructor_id") @db.Uuid
+  name             String
+  startsAt         DateTime    @map("starts_at") @db.Timestamptz(6)
+  endsAt           DateTime?   @map("ends_at") @db.Timestamptz(6)
+  status           ClassStatus @default(PLANNED)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  unit             Unit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  leadInstructor   User        @relation("ClassLeadInstructor", fields: [leadInstructorId], references: [id], onDelete: Restrict)
+  exercises        Exercise[]
+
+  @@index([unitId])
+  @@index([leadInstructorId])
+  @@index([status])
+  @@map("classes")
+}
+
+enum ExerciseStatus {
+  PLANNED
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+/// Training exercise within a class. Optional 1:1 link to an Event with
+/// mode=TACTICAL_TRAINING — when set, the exercise reuses the regular
+/// event infrastructure (zones, missions, positioning, anti-cheat). The
+/// service enforces the mode constraint on write.
+model Exercise {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  classId     String         @map("class_id") @db.Uuid
+  eventId     String?        @unique @map("event_id") @db.Uuid
+  name        String
+  description String?
+  scheduledAt DateTime?      @map("scheduled_at") @db.Timestamptz(6)
+  status      ExerciseStatus @default(PLANNED)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  class       Class          @relation(fields: [classId], references: [id], onDelete: Restrict)
+  event       Event?         @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([classId])
+  @@index([status])
+  @@map("exercises")
 }

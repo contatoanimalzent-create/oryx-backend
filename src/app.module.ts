@@ -21,6 +21,7 @@ import { RankingModule } from './modules/ranking/ranking.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ReputationModule } from './modules/reputation/reputation.module';
 import { SquadsModule } from './modules/squads/squads.module';
+import { TacticalModule } from './modules/tactical/tactical.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { ZonesModule } from './modules/zones/zones.module';
@@ -76,6 +77,7 @@ const env = loadEnv();
     VoiceModule,
     AnalyticsModule,
     AarModule,
+    TacticalModule,
   ],
   controllers: [HealthController],
   providers: [
