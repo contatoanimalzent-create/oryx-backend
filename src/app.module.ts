@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { loadEnv } from './config/env';
 import { HealthController } from './health/health.controller';
+import { AarModule } from './modules/aar/aar.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AntiCheatModule } from './modules/anti-cheat/anti-cheat.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -74,6 +75,7 @@ const env = loadEnv();
     AntiCheatModule,
     VoiceModule,
     AnalyticsModule,
+    AarModule,
   ],
   controllers: [HealthController],
   providers: [
