@@ -24,18 +24,19 @@ enum Role {
 }
 
 model User {
-  id                   String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                String         @unique
-  passwordHash         String         @map("password_hash")
-  displayName          String         @map("display_name")
-  role                 Role           @default(OPERATOR)
-  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String          @unique
+  passwordHash         String          @map("password_hash")
+  displayName          String          @map("display_name")
+  role                 Role            @default(OPERATOR)
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
   refreshTokens        RefreshToken[]
   operator             Operator?
-  createdEvents        Event[]        @relation("EventCreator")
+  createdEvents        Event[]         @relation("EventCreator")
   deviceTokens         DeviceToken[]
-  createdNotifications Notification[] @relation("NotificationCreator")
+  createdNotifications Notification[]  @relation("NotificationCreator")
+  authoredReputation   ReputationLog[] @relation("ReputationAuthor")
 
   @@map("users")
 }
@@ -98,22 +99,23 @@ enum EventMode {
 /// generated geography column come in session 1.11 (zones) when the first
 /// spatial query consumer lands.
 model Event {
-  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name            String
   description     String?
   mode            EventMode
-  status          EventStatus @default(DRAFT)
-  operationalArea Json        @map("operational_area")
-  startsAt        DateTime?   @map("starts_at") @db.Timestamptz(6)
-  endsAt          DateTime?   @map("ends_at") @db.Timestamptz(6)
-  createdById     String?     @map("created_by_id") @db.Uuid
-  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status          EventStatus       @default(DRAFT)
+  operationalArea Json              @map("operational_area")
+  startsAt        DateTime?         @map("starts_at") @db.Timestamptz(6)
+  endsAt          DateTime?         @map("ends_at") @db.Timestamptz(6)
+  createdById     String?           @map("created_by_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy       User?             @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
   teams           Team[]
   positions       PositionHistory[]
   zones           Zone[]
   missions        Mission[]
+  reputationLogs  ReputationLog[]
 
   @@index([status])
   @@index([mode])
@@ -130,14 +132,14 @@ model Event {
 /// Mission types (CAPTURE/DEFEND/HOLD/...) are NOT modeled here — zones are
 /// pure geometry; missions decide how to interpret them (sessão 1.12).
 model Zone {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  eventId     String   @map("event_id") @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String    @map("event_id") @db.Uuid
   name        String
   description String?
   boundary    Json
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   missions    Mission[]
 
   @@unique([eventId, name])
@@ -169,20 +171,20 @@ enum MissionStatus {
 /// service layer (mission-engine in 1.13 reads it). `status` is owned by the
 /// engine; admin can manually set it to CANCELLED via PATCH.
 model Mission {
-  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  eventId       String        @map("event_id") @db.Uuid
-  type          MissionType
-  name          String
-  description   String?
-  zoneId        String?       @map("zone_id") @db.Uuid
-  config        Json
-  pointsReward  Int           @default(0) @map("points_reward")
-  status        MissionStatus     @default(PENDING)
-  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  zone          Zone?             @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  progress      MissionProgress[]
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId      String            @map("event_id") @db.Uuid
+  type         MissionType
+  name         String
+  description  String?
+  zoneId       String?           @map("zone_id") @db.Uuid
+  config       Json
+  pointsReward Int               @default(0) @map("points_reward")
+  status       MissionStatus     @default(PENDING)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  zone         Zone?             @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  progress     MissionProgress[]
 
   @@unique([eventId, name])
   @@index([eventId])
@@ -246,20 +248,21 @@ model Team {
 /// Tactical profile for a field operator. One per user (1:1, optional —
 /// admin/instructor users have no Operator row).
 model Operator {
-  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String            @unique @map("user_id") @db.Uuid
-  callsign         String            @unique
-  bio              String?
-  emergencyContact String?           @map("emergency_contact")
-  bloodType        BloodType         @default(UNKNOWN) @map("blood_type")
-  status           OperatorStatus    @default(ACTIVE)
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String            @unique @map("user_id") @db.Uuid
+  callsign          String            @unique
+  bio               String?
+  emergencyContact  String?           @map("emergency_contact")
+  bloodType         BloodType         @default(UNKNOWN) @map("blood_type")
+  status            OperatorStatus    @default(ACTIVE)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
   user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   squadMemberships  SquadMember[]
   squadsLed         Squad[]           @relation("SquadLeader")
   positions         PositionHistory[]
   missionProgresses MissionProgress[]
+  reputationLogs    ReputationLog[]
 
   @@map("operators")
 }
@@ -372,20 +375,20 @@ enum DevicePlatform {
 /// `target` decides which devices receive it; the worker resolves to the FCM
 /// token list at dispatch time so subsequent device registrations land too.
 model Notification {
-  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  target       NotificationTarget
-  targetId     String?            @map("target_id") @db.Uuid
-  title        String
-  body         String
-  status       NotificationStatus @default(PENDING)
-  sentCount    Int                @default(0) @map("sent_count")
-  failedCount  Int                @default(0) @map("failed_count")
-  sentAt       DateTime?          @map("sent_at") @db.Timestamptz(6)
-  error        String?
-  createdById  String?            @map("created_by_id") @db.Uuid
-  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdBy    User?              @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  target      NotificationTarget
+  targetId    String?            @map("target_id") @db.Uuid
+  title       String
+  body        String
+  status      NotificationStatus @default(PENDING)
+  sentCount   Int                @default(0) @map("sent_count")
+  failedCount Int                @default(0) @map("failed_count")
+  sentAt      DateTime?          @map("sent_at") @db.Timestamptz(6)
+  error       String?
+  createdById String?            @map("created_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy   User?              @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([target, targetId])
   @@index([status])
@@ -404,4 +407,58 @@ model DeviceToken {
 
   @@index([userId])
   @@map("device_tokens")
+}
+
+// ─── Reputation (sessão 1.16) ───────────────────────────────────────────────
+
+enum ReputationKind {
+  PENALTY
+  COMMENDATION
+}
+
+enum ReputationSeverity {
+  MINOR
+  MAJOR
+  SEVERE
+}
+
+enum ReputationReason {
+  CHEATING
+  AFK
+  NO_SHOW
+  ABUSIVE_BEHAVIOR
+  UNSAFE_CONDUCT
+  OUTSTANDING_PERFORMANCE
+  TEAMWORK
+  OTHER
+}
+
+/// Append-only audit trail of penalties/commendations on operators. `delta` is
+/// derived from `kind` × `severity` in the service (admin doesn't pick the
+/// number — keeps abuse in check). Score is computed on-read as 100 + Σ(delta);
+/// no denormalized column on Operator until observability shows pressure.
+///
+/// `eventId` is optional context (which event surfaced the infraction); FK is
+/// SET NULL so the log persists if the event is purged. `createdById` is the
+/// admin/instructor who recorded; nullable for system-generated entries
+/// (anti-cheat in 1.17 will use this path).
+model ReputationLog {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  operatorId  String             @map("operator_id") @db.Uuid
+  eventId     String?            @map("event_id") @db.Uuid
+  kind        ReputationKind
+  severity    ReputationSeverity
+  reason      ReputationReason
+  delta       Int
+  note        String?
+  createdById String?            @map("created_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  operator    Operator           @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  event       Event?             @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation("ReputationAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([operatorId])
+  @@index([eventId])
+  @@index([operatorId, createdAt(sort: Desc)])
+  @@map("reputation_logs")
 }
