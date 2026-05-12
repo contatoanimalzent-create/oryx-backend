@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
+import { ANTI_CHEAT_QUEUE_NAME } from '../anti-cheat/dto/anti-cheat.dto';
 import { MISSION_PROGRESS_QUEUE_NAME } from '../mission-engine/dto/mission-engine.dto';
 import { AuthModule } from '../auth/auth.module';
 import { POSITIONS_QUEUE_NAME } from './dto/positions.dto';
@@ -13,10 +14,11 @@ import { PositionsService } from './positions.service';
     AuthModule,
     BullModule.registerQueue(
       { name: POSITIONS_QUEUE_NAME },
-      // Producer-side registration: PositionsProcessor injects this Queue at
-      // the end of process() to fan a job to mission-engine. The actual
-      // worker (consumer) lives in MissionEngineModule.
+      // Producer-side registration: PositionsProcessor injects these Queues
+      // at the end of process() to fan jobs out to downstream workers. The
+      // actual consumers live in MissionEngineModule and AntiCheatModule.
       { name: MISSION_PROGRESS_QUEUE_NAME },
+      { name: ANTI_CHEAT_QUEUE_NAME },
     ),
   ],
   controllers: [PositionsController],

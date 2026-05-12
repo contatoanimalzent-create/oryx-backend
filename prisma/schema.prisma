@@ -116,6 +116,7 @@ model Event {
   zones           Zone[]
   missions        Mission[]
   reputationLogs  ReputationLog[]
+  cheatSuspicions CheatSuspicion[]
 
   @@index([status])
   @@index([mode])
@@ -263,6 +264,7 @@ model Operator {
   positions         PositionHistory[]
   missionProgresses MissionProgress[]
   reputationLogs    ReputationLog[]
+  cheatSuspicions   CheatSuspicion[]
 
   @@map("operators")
 }
@@ -461,4 +463,49 @@ model ReputationLog {
   @@index([eventId])
   @@index([operatorId, createdAt(sort: Desc)])
   @@map("reputation_logs")
+}
+
+// ─── Anti-cheat (sessão 1.17) ───────────────────────────────────────────────
+
+enum CheatDetector {
+  SPEED_IMPOSSIBLE
+  LOCATION_JUMP
+  GPS_INCONSISTENCY
+}
+
+/// Kept as a dedicated enum (not shared with ReputationSeverity) so the two
+/// scales can evolve independently — anti-cheat severity is a hardware/physics
+/// judgment, reputation severity is an administrative judgment.
+enum CheatSeverity {
+  MINOR
+  MAJOR
+  SEVERE
+}
+
+/// Append-only audit trail of detector hits. One row per (position, detector)
+/// that fired. `evidence` is detector-specific JSON (deltaM, dtSeconds,
+/// calcSpeedMps, accuracyM, ...) — frozen at write time so future threshold
+/// tuning never rewrites history.
+///
+/// `eventId` FK is SET NULL: log survives event purge for long-term cheater
+/// pattern analysis across events. The optional reputation hook (severity >=
+/// MAJOR) writes a parallel `reputation_logs` row via ReputationService; the
+/// two tables are intentionally not joined (one is evidence, the other is
+/// score).
+model CheatSuspicion {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  operatorId String        @map("operator_id") @db.Uuid
+  eventId    String?       @map("event_id") @db.Uuid
+  detector   CheatDetector
+  severity   CheatSeverity
+  evidence   Json
+  recordedAt DateTime      @map("recorded_at") @db.Timestamptz(6)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  operator   Operator      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  event      Event?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([operatorId])
+  @@index([eventId])
+  @@index([operatorId, createdAt(sort: Desc)])
+  @@map("cheat_suspicions")
 }

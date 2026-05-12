@@ -45,6 +45,7 @@ describe('PositionsProcessor', () => {
   };
   let publish: ReturnType<typeof vi.fn>;
   let missionQueue: { add: ReturnType<typeof vi.fn> };
+  let antiCheatQueue: { add: ReturnType<typeof vi.fn> };
 
   beforeAll(() => {
     Object.assign(process.env, TEST_ENV);
@@ -60,11 +61,13 @@ describe('PositionsProcessor', () => {
     };
     redis.getClient.mockReturnValue({ set: redis.rawSet, publish });
     missionQueue = { add: vi.fn().mockResolvedValue({ id: 'mq-job' }) };
+    antiCheatQueue = { add: vi.fn().mockResolvedValue({ id: 'ac-job' }) };
 
     processor = new PositionsProcessor(
       prisma as unknown as PrismaService,
       redis as unknown as RedisService,
       missionQueue as never,
+      antiCheatQueue as never,
     );
   });
 
@@ -130,6 +133,7 @@ describe('PositionsProcessor', () => {
     expect(redis.set).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
     expect(missionQueue.add).not.toHaveBeenCalled();
+    expect(antiCheatQueue.add).not.toHaveBeenCalled();
   });
 
   it('does not throw when realtime publish fails (best-effort)', async () => {
@@ -145,6 +149,37 @@ describe('PositionsProcessor', () => {
     missionQueue.add.mockRejectedValueOnce(new Error('queue down'));
     await expect(processor.process(makeJob() as never)).resolves.toBeUndefined();
     expect(prisma.positionHistory.create).toHaveBeenCalled();
+    // Anti-cheat still runs even when mission-engine enqueue fails.
+    expect(antiCheatQueue.add).toHaveBeenCalled();
+  });
+
+  it('enqueues anti-cheat tick with payload + suffixed jobId', async () => {
+    await processor.process(makeJob({ speedMps: 12.3, accuracyM: 8.5 }) as never);
+
+    expect(antiCheatQueue.add).toHaveBeenCalledOnce();
+    const [jobName, jobData, opts] = antiCheatQueue.add.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+      { jobId: string; attempts: number },
+    ];
+    expect(jobName).toBe('inspect');
+    expect(jobData).toMatchObject({
+      eventId: EVENT_ID,
+      operatorId: OPERATOR_ID,
+      lat: -23.55,
+      lon: -46.62,
+      clientSpeedMps: 12.3,
+      accuracyM: 8.5,
+    });
+    expect(opts.jobId).toMatch(new RegExp(`^${EVENT_ID}:${OPERATOR_ID}:\\d+$`));
+    expect(opts.attempts).toBe(3);
+  });
+
+  it('does not throw when anti-cheat enqueue fails (best-effort)', async () => {
+    antiCheatQueue.add.mockRejectedValueOnce(new Error('anti-cheat queue down'));
+    await expect(processor.process(makeJob() as never)).resolves.toBeUndefined();
+    expect(prisma.positionHistory.create).toHaveBeenCalled();
+    expect(missionQueue.add).toHaveBeenCalled();
   });
 
   it('clamps recordedAt to receivedAt when client clock drifts > 5min', async () => {

@@ -2,6 +2,7 @@ import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 
+import { ANTI_CHEAT_QUEUE_NAME, type AntiCheatInspectJob } from '../anti-cheat/dto/anti-cheat.dto';
 import {
   MISSION_PROGRESS_QUEUE_NAME,
   type MissionProgressJob,
@@ -32,6 +33,8 @@ export class PositionsProcessor extends WorkerHost {
     private readonly redis: RedisService,
     @InjectQueue(MISSION_PROGRESS_QUEUE_NAME)
     private readonly missionProgressQueue: Queue<MissionProgressJob>,
+    @InjectQueue(ANTI_CHEAT_QUEUE_NAME)
+    private readonly antiCheatQueue: Queue<AntiCheatInspectJob>,
   ) {
     super();
   }
@@ -119,13 +122,46 @@ export class PositionsProcessor extends WorkerHost {
         'failed to enqueue mission-engine job',
       );
     }
+
+    // Anti-cheat (sessão 1.17) inspects each new position against the previous
+    // ones for the same operator/event. Independent of mission-engine — must
+    // never block or roll back ingestion.
+    try {
+      await this.antiCheatQueue.add(
+        'inspect',
+        {
+          eventId: payload.eventId,
+          operatorId: payload.operatorId,
+          lat: payload.lat,
+          lon: payload.lon,
+          recordedAt: recordedAt.toISOString(),
+          clientSpeedMps: payload.speedMps,
+          accuracyM: payload.accuracyM,
+        },
+        {
+          // Same scoping as the mission-engine tick — different queue, so no
+          // collision. BullMQ only accepts jobIds with at most two `:` so the
+          // suffix that disambiguated within a shared queue is unnecessary.
+          jobId: `${payload.eventId}:${payload.operatorId}:${recordedAt.getTime()}`,
+          removeOnComplete: 1_000,
+          removeOnFail: 1_000,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1_000 },
+        },
+      );
+    } catch (err) {
+      this.logger.warn(
+        { eventId: payload.eventId, error: err instanceof Error ? err.message : err },
+        'failed to enqueue anti-cheat job',
+      );
+    }
   }
 
   /**
    * If the client clock drifted more than MAX_DRIFT_MS from server time, log
-   * a structured warning (anti-cheat in 1.17 will graduate this to a real
-   * suspicion event) and clamp `recordedAt` to the receive time so downstream
-   * timeline ordering stays sane.
+   * a structured warning and clamp `recordedAt` to the receive time so
+   * downstream timeline ordering stays sane. Anti-cheat (1.17) covers spatial
+   * anomalies; clock-drift is its own signal handled here at ingestion.
    */
   private adjustTimestamp(payload: PositionIngestJob): Date {
     const recorded = new Date(payload.recordedAt);
