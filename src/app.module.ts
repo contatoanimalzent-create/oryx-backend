@@ -10,6 +10,7 @@ import { AarModule } from './modules/aar/aar.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AntiCheatModule } from './modules/anti-cheat/anti-cheat.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CompetitiveModule } from './modules/competitive/competitive.module';
 import { EventsModule } from './modules/events/events.module';
 import { MissionEngineModule } from './modules/mission-engine/mission-engine.module';
 import { MissionsModule } from './modules/missions/missions.module';
@@ -78,6 +79,7 @@ const env = loadEnv();
     AnalyticsModule,
     AarModule,
     TacticalModule,
+    CompetitiveModule,
   ],
   controllers: [HealthController],
   providers: [

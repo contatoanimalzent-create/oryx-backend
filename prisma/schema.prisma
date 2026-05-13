@@ -120,6 +120,7 @@ model Event {
   reputationLogs  ReputationLog[]
   cheatSuspicions CheatSuspicion[]
   exercise        Exercise?
+  rounds          Round[]
 
   @@index([status])
   @@index([mode])
@@ -243,6 +244,7 @@ model Team {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   squads      Squad[]
+  wonRounds   Round[]  @relation("RoundWinner")
 
   @@unique([eventId, name])
   @@index([eventId])
@@ -252,22 +254,24 @@ model Team {
 /// Tactical profile for a field operator. One per user (1:1, optional —
 /// admin/instructor users have no Operator row).
 model Operator {
-  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId            String            @unique @map("user_id") @db.Uuid
-  callsign          String            @unique
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String             @unique @map("user_id") @db.Uuid
+  callsign          String             @unique
   bio               String?
-  emergencyContact  String?           @map("emergency_contact")
-  bloodType         BloodType         @default(UNKNOWN) @map("blood_type")
-  status            OperatorStatus    @default(ACTIVE)
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emergencyContact  String?            @map("emergency_contact")
+  bloodType         BloodType          @default(UNKNOWN) @map("blood_type")
+  status            OperatorStatus     @default(ACTIVE)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   squadMemberships  SquadMember[]
-  squadsLed         Squad[]           @relation("SquadLeader")
+  squadsLed         Squad[]            @relation("SquadLeader")
   positions         PositionHistory[]
   missionProgresses MissionProgress[]
   reputationLogs    ReputationLog[]
   cheatSuspicions   CheatSuspicion[]
+  eliminations      RoundElimination[] @relation("EliminationVictim")
+  killsScored       RoundElimination[] @relation("EliminationKiller")
 
   @@map("operators")
 }
@@ -604,4 +608,64 @@ model Exercise {
   @@index([classId])
   @@index([status])
   @@map("exercises")
+}
+
+// ─── Competitive 5×5 (sessão 1.23) ──────────────────────────────────────────
+
+enum RoundStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+/// One round inside a COMPETITIVE event. The owning Event acts as the match
+/// (no separate match entity yet — CLAUDE.md §3.6). `roundNumber` is unique
+/// per event so admins can scrub timeline + AAR by round.
+///
+/// `winningTeamId` is nullable so we can represent ties (e.g., timer expired
+/// with no objective met) and CANCELLED rounds (admin redoing the start).
+/// FK is SET NULL so a deleted team doesn't cascade-delete historic rounds.
+model Round {
+  id            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId       String             @map("event_id") @db.Uuid
+  roundNumber   Int                @map("round_number")
+  status        RoundStatus        @default(ACTIVE)
+  startedAt     DateTime           @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt       DateTime?          @map("ended_at") @db.Timestamptz(6)
+  winningTeamId String?            @map("winning_team_id") @db.Uuid
+  note          String?
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  winningTeam   Team?              @relation("RoundWinner", fields: [winningTeamId], references: [id], onDelete: SetNull)
+  eliminations  RoundElimination[]
+
+  @@unique([eventId, roundNumber])
+  @@index([eventId])
+  @@index([status])
+  @@map("rounds")
+}
+
+/// One elimination event inside a Round. `eliminatedById` (the killer) is
+/// nullable so we can record self-kills, suicides, friendly-fire-without-
+/// attribution, and timer-eliminations — the metric still counts the death.
+/// UNIQUE (roundId, eliminatedOperatorId) so the same operator can't be
+/// killed twice in one round (they sit out until next round).
+model RoundElimination {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roundId              String    @map("round_id") @db.Uuid
+  eliminatedOperatorId String    @map("eliminated_operator_id") @db.Uuid
+  eliminatedById       String?   @map("eliminated_by_id") @db.Uuid
+  eliminatedAt         DateTime  @default(now()) @map("eliminated_at") @db.Timestamptz(6)
+  note                 String?
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  round                Round     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  eliminated           Operator  @relation("EliminationVictim", fields: [eliminatedOperatorId], references: [id], onDelete: Restrict)
+  killer               Operator? @relation("EliminationKiller", fields: [eliminatedById], references: [id], onDelete: SetNull)
+
+  @@unique([roundId, eliminatedOperatorId])
+  @@index([roundId])
+  @@index([eliminatedOperatorId])
+  @@index([eliminatedById])
+  @@map("round_eliminations")
 }
